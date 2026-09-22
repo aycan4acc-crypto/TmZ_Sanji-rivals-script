@@ -1,0 +1,648 @@
+-- language: Lua, executor: Synapse X / KRNL / Fluxus
+-- Rivals — TmZ_Sanji Edition v4
+-- GUI Toggle: Insert (verstellbar) | Aimbot: Wall Check aktiv | ESP: immer sichtbar
+
+local Players    = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UIS        = game:GetService("UserInputService")
+local ws         = game:GetService("Workspace")
+local lighting   = game:GetService("Lighting")
+local cam        = ws.CurrentCamera
+local plr        = Players.LocalPlayer
+
+-- ── SETTINGS ──────────────────────────────────────────────────────────────────
+local S = {
+    AimbotEnabled  = true,
+    Smoothness     = 10,
+    FOV            = 150,
+    HitPart        = "Head",
+    TeamCheck      = true,
+    WallCheck      = true,
+    SilentAim      = false,
+    ShowCircle     = true,
+    ESPEnabled     = true,
+    MaxDist        = 600,
+    ShowHealth     = true,
+    ShowDist       = true,
+    ShowName       = true,
+    NoRecoil       = false,
+    BunnyHop       = false,
+    InfJump        = false,
+    SpeedBoost     = false,
+    SpeedValue     = 28,
+    FPSBoost       = false,
+    ToggleKey      = Enum.KeyCode.Insert,
+}
+
+-- ── FOV CIRCLE ────────────────────────────────────────────────────────────────
+local circle    = Drawing.new("Circle")
+circle.Visible  = S.ShowCircle
+circle.Radius   = S.FOV
+circle.Color    = Color3.fromRGB(255,255,255)
+circle.Thickness= 1
+circle.Filled   = false
+circle.Position = Vector2.new(cam.ViewportSize.X/2, cam.ViewportSize.Y/2)
+
+local wm = Drawing.new("Text")
+wm.Text    = "TmZ_Sanji | Rivals"
+wm.Size    = 14
+wm.Color   = Color3.fromRGB(255,255,255)
+wm.Outline = true
+wm.Position= Vector2.new(10,10)
+wm.Visible = true
+wm.Font    = Drawing.Fonts.Plex
+
+-- ── FPS BOOST ─────────────────────────────────────────────────────────────────
+local origShadows = lighting.GlobalShadows
+
+local function enableFPSBoost()
+    pcall(function() settings().Rendering.QualityLevel = 1 end)
+    lighting.GlobalShadows = false
+    lighting.FogEnd = 9e9; lighting.FogStart = 9e9
+    lighting.Brightness = 2
+    lighting.EnvironmentDiffuseScale = 0
+    lighting.EnvironmentSpecularScale = 0
+    local atm = lighting:FindFirstChildOfClass("Atmosphere")
+    if atm then atm.Density=0; atm.Glare=0; atm.Haze=0 end
+    for _, v in ipairs(lighting:GetChildren()) do
+        pcall(function()
+            if v:IsA("BloomEffect") or v:IsA("ColorCorrectionEffect")
+            or v:IsA("DepthOfFieldEffect") or v:IsA("SunRaysEffect")
+            or v:IsA("BlurEffect") then v.Enabled=false end
+        end)
+    end
+    for _, v in ipairs(ws:GetDescendants()) do
+        pcall(function()
+            if v:IsA("ParticleEmitter") or v:IsA("Trail")
+            or v:IsA("Smoke") or v:IsA("Fire")
+            or v:IsA("Sparkles") or v:IsA("Beam") then v.Enabled=false end
+            if v:IsA("Decal") or v:IsA("Texture") then v.Transparency=1 end
+            if v:IsA("BasePart") and not v:IsA("Terrain") then v.CastShadow=false end
+        end)
+    end
+    pcall(function()
+        ws.Terrain.WaterWaveSize=0; ws.Terrain.WaterWaveSpeed=0
+        ws.Terrain.WaterReflectance=0; ws.Terrain.WaterTransparency=1
+    end)
+end
+
+local function disableFPSBoost()
+    pcall(function() settings().Rendering.QualityLevel=Enum.QualityLevel.Automatic end)
+    lighting.GlobalShadows = origShadows
+    for _, v in ipairs(lighting:GetChildren()) do
+        pcall(function()
+            if v:IsA("BloomEffect") or v:IsA("ColorCorrectionEffect")
+            or v:IsA("DepthOfFieldEffect") or v:IsA("SunRaysEffect")
+            or v:IsA("BlurEffect") then v.Enabled=true end
+        end)
+    end
+end
+
+-- ── GUI ───────────────────────────────────────────────────────────────────────
+local gui = Instance.new("ScreenGui")
+gui.Name="TmZ_Sanji"; gui.ResetOnSpawn=false
+gui.ZIndexBehavior=Enum.ZIndexBehavior.Sibling
+gui.Parent=game:GetService("CoreGui")
+
+local win = Instance.new("Frame")
+win.Size=UDim2.new(0,280,0,560)
+win.Position=UDim2.new(0,12,0.04,0)
+win.BackgroundColor3=Color3.fromRGB(8,8,14)
+win.BorderSizePixel=0
+win.Active=true; win.Draggable=true; win.Parent=gui
+Instance.new("UICorner",win).CornerRadius=UDim.new(0,10)
+
+local stroke=Instance.new("UIStroke")
+stroke.Color=Color3.fromRGB(180,30,30)
+stroke.Thickness=1.5; stroke.Parent=win
+
+local header=Instance.new("Frame")
+header.Size=UDim2.new(1,0,0,52)
+header.BackgroundColor3=Color3.fromRGB(14,14,22)
+header.BorderSizePixel=0; header.Parent=win
+Instance.new("UICorner",header).CornerRadius=UDim.new(0,10)
+
+local line=Instance.new("Frame")
+line.Size=UDim2.new(1,0,0,2)
+line.Position=UDim2.new(0,0,1,-2)
+line.BackgroundColor3=Color3.fromRGB(220,30,30)
+line.BorderSizePixel=0; line.Parent=header
+
+local logo=Instance.new("TextLabel")
+logo.Size=UDim2.new(0.75,0,0.55,0)
+logo.Position=UDim2.new(0.04,0,0.08,0)
+logo.BackgroundTransparency=1
+logo.Text="TmZ_Sanji"
+logo.TextColor3=Color3.fromRGB(220,30,30)
+logo.Font=Enum.Font.GothamBold
+logo.TextSize=18; logo.TextXAlignment=Enum.TextXAlignment.Left
+logo.Parent=header
+
+local sub=Instance.new("TextLabel")
+sub.Size=UDim2.new(0.75,0,0.35,0)
+sub.Position=UDim2.new(0.04,0,0.62,0)
+sub.BackgroundTransparency=1
+sub.Text="Rivals Script • Made by TmZ_Sanji"
+sub.TextColor3=Color3.fromRGB(100,100,130)
+sub.Font=Enum.Font.Gotham
+sub.TextSize=10; sub.TextXAlignment=Enum.TextXAlignment.Left
+sub.Parent=header
+
+local keyLbl=Instance.new("TextLabel")
+keyLbl.Size=UDim2.new(0.3,0,0.5,0)
+keyLbl.Position=UDim2.new(0.68,0,0.1,0)
+keyLbl.BackgroundColor3=Color3.fromRGB(30,30,45)
+keyLbl.TextColor3=Color3.fromRGB(220,30,30)
+keyLbl.Text=tostring(S.ToggleKey.Name)
+keyLbl.Font=Enum.Font.GothamBold
+keyLbl.TextSize=10; keyLbl.Parent=header
+Instance.new("UICorner",keyLbl).CornerRadius=UDim.new(0,4)
+
+local keySubLbl=Instance.new("TextLabel")
+keySubLbl.Size=UDim2.new(0.3,0,0.35,0)
+keySubLbl.Position=UDim2.new(0.68,0,0.62,0)
+keySubLbl.BackgroundTransparency=1
+keySubLbl.TextColor3=Color3.fromRGB(80,80,100)
+keySubLbl.Text="toggle key"
+keySubLbl.Font=Enum.Font.Gotham
+keySubLbl.TextSize=9; keySubLbl.Parent=header
+
+local minBtn=Instance.new("TextButton")
+minBtn.Size=UDim2.new(0,22,0,22)
+minBtn.Position=UDim2.new(1,-28,0,8)
+minBtn.BackgroundColor3=Color3.fromRGB(220,30,30)
+minBtn.Text="—"; minBtn.TextColor3=Color3.new(1,1,1)
+minBtn.Font=Enum.Font.GothamBold; minBtn.TextSize=13
+minBtn.Parent=header
+Instance.new("UICorner",minBtn).CornerRadius=UDim.new(0,5)
+
+local tabFrame=Instance.new("Frame")
+tabFrame.Size=UDim2.new(1,0,0,32)
+tabFrame.Position=UDim2.new(0,0,0,52)
+tabFrame.BackgroundColor3=Color3.fromRGB(10,10,18)
+tabFrame.BorderSizePixel=0; tabFrame.Parent=win
+
+local tabLayout=Instance.new("UIListLayout")
+tabLayout.FillDirection=Enum.FillDirection.Horizontal
+tabLayout.Padding=UDim.new(0,2); tabLayout.Parent=tabFrame
+
+local tabs={"Combat","ESP","Extras","FPS","Keys"}
+local tabBtns={}; local tabContents={}
+
+local function makeTab(name)
+    local tb=Instance.new("TextButton")
+    tb.Size=UDim2.new(1/#tabs,-2,1,0)
+    tb.BackgroundColor3=Color3.fromRGB(20,20,32)
+    tb.TextColor3=Color3.fromRGB(120,120,150)
+    tb.Text=name; tb.Font=Enum.Font.GothamBold
+    tb.TextSize=9; tb.Parent=tabFrame
+    Instance.new("UICorner",tb).CornerRadius=UDim.new(0,4)
+    tabBtns[name]=tb
+
+    local content=Instance.new("ScrollingFrame")
+    content.Size=UDim2.new(1,-8,1,-92)
+    content.Position=UDim2.new(0,4,0,88)
+    content.BackgroundTransparency=1
+    content.ScrollBarThickness=2
+    content.AutomaticCanvasSize=Enum.AutomaticSize.Y
+    content.CanvasSize=UDim2.new(0,0,0,0)
+    content.Visible=false; content.Parent=win
+    local ul=Instance.new("UIListLayout")
+    ul.Padding=UDim.new(0,4); ul.Parent=content
+    Instance.new("UIPadding",content).PaddingTop=UDim.new(0,4)
+    tabContents[name]=content
+    return content
+end
+
+for _,t in ipairs(tabs) do makeTab(t) end
+
+local activeTab="Combat"
+tabContents["Combat"].Visible=true
+tabBtns["Combat"].BackgroundColor3=Color3.fromRGB(220,30,30)
+tabBtns["Combat"].TextColor3=Color3.new(1,1,1)
+
+local function switchTab(name)
+    for _,t in ipairs(tabs) do
+        tabContents[t].Visible=(t==name)
+        tabBtns[t].BackgroundColor3=(t==name) and Color3.fromRGB(220,30,30) or Color3.fromRGB(20,20,32)
+        tabBtns[t].TextColor3=(t==name) and Color3.new(1,1,1) or Color3.fromRGB(120,120,150)
+    end
+    activeTab=name
+end
+for _,t in ipairs(tabs) do
+    tabBtns[t].MouseButton1Click:Connect(function() switchTab(t) end)
+end
+
+local isMin=false
+minBtn.MouseButton1Click:Connect(function()
+    isMin=not isMin
+    tabFrame.Visible=not isMin
+    tabContents[activeTab].Visible=not isMin
+    win.Size=isMin and UDim2.new(0,280,0,52) or UDim2.new(0,280,0,560)
+end)
+
+-- ── WIDGET BUILDERS ───────────────────────────────────────────────────────────
+local function mkToggle(parent,txt,key,cb)
+    local row=Instance.new("Frame")
+    row.Size=UDim2.new(1,0,0,30)
+    row.BackgroundColor3=Color3.fromRGB(14,14,22)
+    row.BorderSizePixel=0; row.Parent=parent
+    Instance.new("UICorner",row).CornerRadius=UDim.new(0,6)
+    local label=Instance.new("TextLabel")
+    label.Size=UDim2.new(0.7,0,1,0)
+    label.Position=UDim2.new(0,10,0,0)
+    label.BackgroundTransparency=1
+    label.TextColor3=Color3.fromRGB(200,200,210)
+    label.Text=txt; label.Font=Enum.Font.Gotham
+    label.TextSize=12; label.TextXAlignment=Enum.TextXAlignment.Left
+    label.Parent=row
+    local pill=Instance.new("TextButton")
+    pill.Size=UDim2.new(0,40,0,18)
+    pill.Position=UDim2.new(1,-48,0.5,-9)
+    pill.BackgroundColor3=S[key] and Color3.fromRGB(220,30,30) or Color3.fromRGB(35,35,50)
+    pill.Text=""; pill.Parent=row
+    Instance.new("UICorner",pill).CornerRadius=UDim.new(1,0)
+    local dot=Instance.new("Frame")
+    dot.Size=UDim2.new(0,14,0,14)
+    dot.Position=S[key] and UDim2.new(1,-16,0.5,-7) or UDim2.new(0,2,0.5,-7)
+    dot.BackgroundColor3=Color3.new(1,1,1); dot.Parent=pill
+    Instance.new("UICorner",dot).CornerRadius=UDim.new(1,0)
+    pill.MouseButton1Click:Connect(function()
+        S[key]=not S[key]
+        pill.BackgroundColor3=S[key] and Color3.fromRGB(220,30,30) or Color3.fromRGB(35,35,50)
+        dot.Position=S[key] and UDim2.new(1,-16,0.5,-7) or UDim2.new(0,2,0.5,-7)
+        if cb then cb(S[key]) end
+    end)
+end
+
+local function mkSlider(parent,txt,key,min,max)
+    local row=Instance.new("Frame")
+    row.Size=UDim2.new(1,0,0,44)
+    row.BackgroundColor3=Color3.fromRGB(14,14,22)
+    row.BorderSizePixel=0; row.Parent=parent
+    Instance.new("UICorner",row).CornerRadius=UDim.new(0,6)
+    local lbl=Instance.new("TextLabel")
+    lbl.Size=UDim2.new(1,-12,0,18); lbl.Position=UDim2.new(0,10,0,4)
+    lbl.BackgroundTransparency=1
+    lbl.TextColor3=Color3.fromRGB(200,200,210)
+    lbl.Text=txt..":  "..S[key]
+    lbl.Font=Enum.Font.Gotham; lbl.TextSize=11
+    lbl.TextXAlignment=Enum.TextXAlignment.Left; lbl.Parent=row
+    local track=Instance.new("Frame")
+    track.Size=UDim2.new(1,-20,0,5); track.Position=UDim2.new(0,10,0,28)
+    track.BackgroundColor3=Color3.fromRGB(30,30,45); track.Parent=row
+    Instance.new("UICorner",track).CornerRadius=UDim.new(0,3)
+    local fill=Instance.new("Frame")
+    fill.Size=UDim2.new((S[key]-min)/(max-min),0,1,0)
+    fill.BackgroundColor3=Color3.fromRGB(220,30,30); fill.Parent=track
+    Instance.new("UICorner",fill).CornerRadius=UDim.new(0,3)
+    local knob=Instance.new("Frame")
+    knob.Size=UDim2.new(0,10,0,10)
+    knob.Position=UDim2.new((S[key]-min)/(max-min),-5,0.5,-5)
+    knob.BackgroundColor3=Color3.new(1,1,1); knob.Parent=track
+    Instance.new("UICorner",knob).CornerRadius=UDim.new(1,0)
+    local drag=false
+    track.InputBegan:Connect(function(i)
+        if i.UserInputType==Enum.UserInputType.MouseButton1 then drag=true end
+    end)
+    UIS.InputEnded:Connect(function(i)
+        if i.UserInputType==Enum.UserInputType.MouseButton1 then drag=false end
+    end)
+    RunService.Heartbeat:Connect(function()
+        if not drag then return end
+        local mx=UIS:GetMouseLocation()
+        local t=math.clamp((mx.X-track.AbsolutePosition.X)/track.AbsoluteSize.X,0,1)
+        local v=math.floor(min+t*(max-min))
+        S[key]=v; fill.Size=UDim2.new(t,0,1,0)
+        knob.Position=UDim2.new(t,-5,0.5,-5)
+        lbl.Text=txt..":  "..v
+        if key=="FOV" then circle.Radius=v end
+    end)
+end
+
+local function mkSep(parent,txt)
+    local f=Instance.new("Frame")
+    f.Size=UDim2.new(1,0,0,20); f.BackgroundTransparency=1; f.Parent=parent
+    local l=Instance.new("TextLabel")
+    l.Size=UDim2.new(1,0,1,0); l.BackgroundTransparency=1
+    l.TextColor3=Color3.fromRGB(220,30,30)
+    l.Text=txt; l.Font=Enum.Font.GothamBold
+    l.TextSize=10; l.TextXAlignment=Enum.TextXAlignment.Left; l.Parent=f
+end
+
+-- ── TABS BEFÜLLEN ─────────────────────────────────────────────────────────────
+local C=tabContents["Combat"]
+mkSep(C,"  AIMBOT")
+mkToggle(C,"Aimbot  [RMB]",  "AimbotEnabled")
+mkToggle(C,"Wall Check",     "WallCheck")
+mkToggle(C,"Silent Aim",     "SilentAim")
+mkToggle(C,"Team Check",     "TeamCheck")
+mkSep(C,"  SETTINGS")
+mkSlider(C,"Smoothness",     "Smoothness",1,25)
+mkSlider(C,"FOV Radius",     "FOV",30,500)
+mkSep(C,"  FOV CIRCLE")
+mkToggle(C,"FOV Circle",     "ShowCircle",function(v) circle.Visible=v end)
+
+local E=tabContents["ESP"]
+mkSep(E,"  ESP  [durch Wände]")
+mkToggle(E,"ESP",       "ESPEnabled")
+mkToggle(E,"Name",      "ShowName")
+mkToggle(E,"Health",    "ShowHealth")
+mkToggle(E,"Distance",  "ShowDist")
+mkSep(E,"  RANGE")
+mkSlider(E,"Max Distance","MaxDist",50,1000)
+
+local X=tabContents["Extras"]
+mkSep(X,"  MOVEMENT")
+mkToggle(X,"No Recoil",  "NoRecoil")
+mkToggle(X,"Bunny Hop",  "BunnyHop")
+mkToggle(X,"Inf Jump",   "InfJump")
+mkToggle(X,"Speed Boost","SpeedBoost")
+mkSlider(X,"Speed Value","SpeedValue",16,100)
+
+local F=tabContents["FPS"]
+mkSep(F,"  FPS BOOST")
+mkToggle(F,"FPS Boost","FPSBoost",function(v)
+    if v then enableFPSBoost() else disableFPSBoost() end
+end)
+
+-- ── KEYS TAB ──────────────────────────────────────────────────────────────────
+local K=tabContents["Keys"]
+mkSep(K,"  GUI TOGGLE KEY")
+
+local keyRow=Instance.new("Frame")
+keyRow.Size=UDim2.new(1,0,0,60)
+keyRow.BackgroundColor3=Color3.fromRGB(14,14,22)
+keyRow.BorderSizePixel=0; keyRow.Parent=K
+Instance.new("UICorner",keyRow).CornerRadius=UDim.new(0,6)
+
+local keyDesc=Instance.new("TextLabel")
+keyDesc.Size=UDim2.new(1,0,0,24)
+keyDesc.Position=UDim2.new(0,10,0,4)
+keyDesc.BackgroundTransparency=1
+keyDesc.TextColor3=Color3.fromRGB(200,200,210)
+keyDesc.Text="Aktueller Key:  "..S.ToggleKey.Name
+keyDesc.Font=Enum.Font.Gotham; keyDesc.TextSize=12
+keyDesc.TextXAlignment=Enum.TextXAlignment.Left
+keyDesc.Parent=keyRow
+
+local bindBtn=Instance.new("TextButton")
+bindBtn.Size=UDim2.new(1,-20,0,24)
+bindBtn.Position=UDim2.new(0,10,0,30)
+bindBtn.BackgroundColor3=Color3.fromRGB(220,30,30)
+bindBtn.TextColor3=Color3.new(1,1,1)
+bindBtn.Text="[ Klick → Taste drücken ]"
+bindBtn.Font=Enum.Font.GothamBold; bindBtn.TextSize=11
+bindBtn.Parent=keyRow
+Instance.new("UICorner",bindBtn).CornerRadius=UDim.new(0,5)
+
+local binding=false
+bindBtn.MouseButton1Click:Connect(function()
+    if binding then return end
+    binding=true
+    bindBtn.Text="Warte auf Taste..."
+    bindBtn.BackgroundColor3=Color3.fromRGB(150,20,20)
+end)
+
+UIS.InputBegan:Connect(function(i,g)
+    if g then return end
+    if binding and i.UserInputType==Enum.UserInputType.Keyboard then
+        S.ToggleKey=i.KeyCode
+        keyDesc.Text="Aktueller Key:  "..i.KeyCode.Name
+        keyLbl.Text=i.KeyCode.Name
+        bindBtn.Text="[ Klick → Taste drücken ]"
+        bindBtn.BackgroundColor3=Color3.fromRGB(220,30,30)
+        binding=false
+        return
+    end
+    if not binding and i.KeyCode==S.ToggleKey then
+        win.Visible=not win.Visible
+        circle.Visible=win.Visible and S.ShowCircle
+        wm.Visible=win.Visible
+    end
+end)
+
+-- ── HELPERS ───────────────────────────────────────────────────────────────────
+local function getHum(p)     return p.Character and p.Character:FindFirstChildOfClass("Humanoid") end
+local function getRoot(p)    return p.Character and p.Character:FindFirstChild("HumanoidRootPart") end
+local function getHitPart(p) return p.Character and p.Character:FindFirstChild(S.HitPart) end
+local function sameTeam(p)   return S.TeamCheck and plr.Team and p.Team and plr.Team==p.Team end
+
+local function wallCheck(from,target)
+    if not S.WallCheck then return true end
+    local params=RaycastParams.new()
+    params.FilterDescendantsInstances={plr.Character,target.Parent}
+    params.FilterType=Enum.RaycastFilterType.Exclude
+    local result=ws:Raycast(from,target.Position-from,params)
+    return not result or result.Instance:IsDescendantOf(target.Parent)
+end
+
+local function getBest()
+    local center=Vector2.new(cam.ViewportSize.X/2,cam.ViewportSize.Y/2)
+    local best,bd=nil,S.FOV
+    local myRoot=getRoot(plr)
+    for _,p in ipairs(Players:GetPlayers()) do
+        if p==plr or sameTeam(p) then continue end
+        local hum=getHum(p)
+        if not hum or hum.Health<=0 then continue end
+        local part=getHitPart(p)
+        if not part then continue end
+        local sp,onScreen=cam:WorldToViewportPoint(part.Position)
+        if not onScreen then continue end
+        local d2=(Vector2.new(sp.X,sp.Y)-center).Magnitude
+        if d2>S.FOV then continue end
+        if myRoot and not wallCheck(myRoot.Position,part) then continue end
+        if d2<bd then bd=d2; best=part end
+    end
+    return best
+end
+
+-- ── AIMBOT ────────────────────────────────────────────────────────────────────
+RunService.Heartbeat:Connect(function()
+    circle.Position=Vector2.new(cam.ViewportSize.X/2,cam.ViewportSize.Y/2)
+    if not S.AimbotEnabled then return end
+    if not UIS:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then return end
+    local target=getBest()
+    if not target then return end
+    local sp=cam:WorldToViewportPoint(target.Position)
+    local center=Vector2.new(cam.ViewportSize.X/2,cam.ViewportSize.Y/2)
+    local delta=(Vector2.new(sp.X,sp.Y)-center)/(S.SilentAim and S.Smoothness*8 or S.Smoothness)
+    mousemoverel(delta.X,delta.Y)
+end)
+
+-- ── NO RECOIL ─────────────────────────────────────────────────────────────────
+RunService.Heartbeat:Connect(function()
+    if not S.NoRecoil then return end
+    if not UIS:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then return end
+    mousemoverel(0,-0.5)
+end)
+
+-- ── BUNNY HOP ─────────────────────────────────────────────────────────────────
+UIS.InputBegan:Connect(function(i,g)
+    if g or not S.BunnyHop then return end
+    if i.KeyCode==Enum.KeyCode.Space then
+        local hum=plr.Character and plr.Character:FindFirstChildOfClass("Humanoid")
+        if hum then hum:ChangeState(Enum.HumanoidStateType.Jumping) end
+    end
+end)
+
+UIS.JumpRequest:Connect(function()
+    if not S.InfJump then return end
+    local hum=plr.Character and plr.Character:FindFirstChildOfClass("Humanoid")
+    if hum then hum:ChangeState(Enum.HumanoidStateType.Jumping) end
+end)
+
+-- ── SPEED ─────────────────────────────────────────────────────────────────────
+RunService.Heartbeat:Connect(function()
+    local hum=plr.Character and plr.Character:FindFirstChildOfClass("Humanoid")
+    if not hum then return end
+    hum.WalkSpeed=S.SpeedBoost and S.SpeedValue or 16
+end)
+
+-- ── ESP — optimiert: kein Rebuild-Spam, nur Update ───────────────────────────
+--
+-- Original: alle 0.05s ALLES zerstören + neu erstellen → massiver GC-Druck
+-- Fix:      pro Spieler einmal bauen, dann nur Label-Text + Sichtbarkeit updaten
+--           Rebuild nur wenn sich Spielerliste ändert (join/leave/respawn)
+--
+local espObjects = {}
+-- espObjects[player] = { hl = Highlight, bb = BillboardGui, lbl = TextLabel }
+
+local function cleanESP(p)
+    if espObjects[p] then
+        pcall(function() espObjects[p].hl:Destroy() end)
+        pcall(function() espObjects[p].bb:Destroy() end)
+        espObjects[p] = nil
+    end
+end
+
+local function buildESPForPlayer(p)
+    cleanESP(p)
+    local char = p.Character; if not char then return end
+    local root = char:FindFirstChild("HumanoidRootPart"); if not root then return end
+
+    local hl = Instance.new("Highlight")
+    hl.FillColor         = Color3.fromRGB(255,40,40)
+    hl.OutlineColor      = Color3.fromRGB(255,255,255)
+    hl.FillTransparency  = 0.72
+    hl.OutlineTransparency = 0
+    hl.Adornee           = char
+    hl.Parent            = ws
+
+    local bb = Instance.new("BillboardGui")
+    bb.Size         = UDim2.new(0,120,0,22)
+    bb.StudsOffset  = Vector3.new(0,3.2,0)
+    bb.AlwaysOnTop  = true
+    bb.Adornee      = root
+    bb.Parent       = ws
+
+    local tLabel = Instance.new("TextLabel")
+    tLabel.Size                    = UDim2.new(1,0,1,0)
+    tLabel.BackgroundTransparency  = 1
+    tLabel.TextColor3              = Color3.fromRGB(255,255,255)
+    tLabel.Text                    = ""
+    tLabel.Font                    = Enum.Font.GothamBold
+    tLabel.TextSize                = 11
+    tLabel.TextStrokeTransparency  = 0
+    tLabel.Parent                  = bb
+
+    espObjects[p] = { hl = hl, bb = bb, lbl = tLabel, root = root, char = char }
+end
+
+-- Spieler verlässt / stirbt → aufräumen
+local function onPlayerRemoving(p)
+    cleanESP(p)
+end
+
+local function onCharacterAdded(p, char)
+    cleanESP(p)
+    -- kurz warten bis HumanoidRootPart geladen
+    task.delay(1, function()
+        if S.ESPEnabled and p and p.Character == char then
+            buildESPForPlayer(p)
+        end
+    end)
+end
+
+for _, p in ipairs(Players:GetPlayers()) do
+    if p ~= plr then
+        p.CharacterAdded:Connect(function(char) onCharacterAdded(p, char) end)
+        p.CharacterRemoving:Connect(function() cleanESP(p) end)
+    end
+end
+
+Players.PlayerAdded:Connect(function(p)
+    p.CharacterAdded:Connect(function(char) onCharacterAdded(p, char) end)
+    p.CharacterRemoving:Connect(function() cleanESP(p) end)
+end)
+
+Players.PlayerRemoving:Connect(onPlayerRemoving)
+
+plr.CharacterAdded:Connect(function()
+    -- eigenes Respawn: alle ESP neu bauen (Referenzen auf altes Char ungültig)
+    for p, _ in pairs(espObjects) do cleanESP(p) end
+    task.delay(1, function()
+        if not S.ESPEnabled then return end
+        for _, p in ipairs(Players:GetPlayers()) do
+            if p ~= plr and p.Character then buildESPForPlayer(p) end
+        end
+    end)
+end)
+
+-- ── ESP UPDATE-LOOP (nur Werte schreiben, kein Destroy/Create) ────────────────
+local lastESP = 0
+RunService.Heartbeat:Connect(function()
+    local t = tick()
+    -- Update-Rate: 0.1s reicht für Labels (war 0.05s mit full rebuild)
+    if t - lastESP < 0.1 then return end
+    lastESP = t
+
+    if not S.ESPEnabled then
+        for p, obj in pairs(espObjects) do
+            obj.hl.Enabled = false
+            obj.bb.Enabled = false
+        end
+        return
+    end
+
+    local myRoot = getRoot(plr)
+
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p == plr or sameTeam(p) then continue end
+
+        local hum  = getHum(p)
+        local obj  = espObjects[p]
+
+        -- Spieler hat kein Objekt aber lebendes Char → bauen
+        if not obj and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+            buildESPForPlayer(p)
+            obj = espObjects[p]
+        end
+
+        if not obj then continue end
+
+        -- Prüfen ob Char noch gültig (Respawn-Lücke)
+        if not obj.char or not obj.char.Parent then
+            cleanESP(p)
+            continue
+        end
+
+        local dead    = not hum or hum.Health <= 0
+        local dist    = myRoot and (obj.root.Position - myRoot.Position).Magnitude or math.huge
+        local inRange = dist <= S.MaxDist
+
+        local show = (not dead) and inRange
+        obj.hl.Enabled = show
+        obj.bb.Enabled = show
+
+        if show then
+            local parts = {}
+            if S.ShowName   then table.insert(parts, p.Name) end
+            if S.ShowHealth then table.insert(parts, "HP:"..math.floor(hum.Health)) end
+            if S.ShowDist   then table.insert(parts, math.floor(dist).."m") end
+            obj.lbl.Text = table.concat(parts, " | ")
+        end
+    end
+end)
+
+print("[TmZ_Sanji] Rivals v4 geladen | "..S.ToggleKey.Name.."=GUI | RMB=Aimbot")
